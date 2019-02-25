@@ -1,7 +1,8 @@
 # Phase 2, simple implementation 
 
-* Image rezize, greyscale 
+* Function for resize the image
+* Function for convert RGB to greyscale  
+* ZNCC algorithm
 
-* ZNCC algorithm to correct 
 
 
