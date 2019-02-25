@@ -3,6 +3,10 @@
 * Function for resize the image
 * Function for convert RGB to greyscale  
 * ZNCC algorithm
+* Cross-checking function 
+* Occlusion-filling 
+
+
 
 
 

@@ -185,6 +185,120 @@ unsigned char* Cross_checking(unsigned char* disparityR, unsigned char* disparit
 	}
 	return output;
 }
+
+unsigned char* Occlusion_filling(unsigned char* crossimage, int width, int height) {
+	for (int h = 0; h < height; h++) {
+		for (int w = 0; w < width; w++) {
+			if (crossimage[h*width + w] == 0) {
+				int d = 1;
+				while (crossimage[h*width + w] == 0) {
+					if ((h - d) > 0) {
+						if (crossimage[(h - d)*width + w] != 0) {
+							crossimage[h*width + w] = crossimage[(h - d)*width + w];
+							break;
+						}
+						else if ((w + d) < width) {
+							if (crossimage[(h - d)*width + w + d] != 0) {
+								crossimage[h*width + w] = crossimage[(h - d)*width + w + d];
+								break;
+							}
+						}
+						else if ((w - d) > 0) {
+							if (crossimage[(h - d)*width + w - d] != 0) {
+								crossimage[h*width + w] = crossimage[(h - d)*width + w - d];
+								break;
+							}
+						}
+					}
+					else if (h + d < height) {
+						if (crossimage[(h + d)*width + w] != 0) {
+							crossimage[h*width + w] = crossimage[(h + d)*width + w];
+							break;
+						}
+						else if ((w + d) < width) {
+							if (crossimage[(h + d)*width + w + d] != 0) {
+								crossimage[h*width + w] = crossimage[(h + d)*width + w + d];
+								break;
+							}
+						}
+						else if ((w - d) > 0) {
+							if (crossimage[(h + d)*width + w - d] != 0) {
+								crossimage[h*width + w] = crossimage[(h + d)*width + w - d];
+								break;
+							}
+						}
+
+					}
+					d++;
+				}
+			}
+		}
+
+	}
+	return crossimage;
+}
+
+unsigned char* Occlusion_filling_v2(unsigned char* crossimage, int width, int height) {
+	unsigned char* output = (unsigned char*)malloc(width*height);
+	for (int h = 0; h < height; h++) {
+		for (int w = 0; w < width; w++) {
+			if (crossimage[h*width + w] == 0) {
+				int d = 1;
+				bool test = false; 
+				while (test == false) {
+					if ((h - d) > 0) {
+						if (crossimage[(h - d)*width + w] != 0) {
+							output[h*width + w] = crossimage[(h - d)*width + w];
+							break;
+						}
+						else if ((w + d) < width) {
+							if (crossimage[(h - d)*width + w + d] != 0) {
+								output[h*width + w] = crossimage[(h - d)*width + w + d];
+								break;
+							}
+						}
+						else if ((w - d) > 0) {
+							if (crossimage[(h - d)*width + w - d] != 0) {
+								output[h*width + w] = crossimage[(h - d)*width + w - d];
+								break;
+							}
+						}
+					}
+					else if (h + d < height) {
+						if (crossimage[(h + d)*width + w] != 0) {
+							output[h*width + w] = crossimage[(h + d)*width + w];
+							break;
+						}
+						else if ((w + d) < width) {
+							if (crossimage[(h + d)*width + w + d] != 0) {
+								output[h*width + w] = crossimage[(h + d)*width + w + d];
+								break;
+							}
+						}
+						else if ((w - d) > 0) {
+							if (crossimage[(h + d)*width + w - d] != 0) {
+								output[h*width + w] = crossimage[(h + d)*width + w - d];
+								break;
+							}
+						}
+
+					}
+					d++;
+				}
+			}
+			else {
+				output[h*width + w] = crossimage[h*width + w];
+			}
+		}
+
+	}
+	return output;
+}
+				
+
+							
+
+
 int main() {
 	//Decode the image, source lodepng.h example
 
@@ -214,10 +328,10 @@ int main() {
 	//ZNCC algorithm 
 	unsigned char* disparity_image = ZNCC(imggrey1, imggrey, width / 4, height / 4, 65, 9);
 	unsigned char* disparity_image_right = ZNCC2(imggrey1, imggrey, width / 4, height / 4, 65, 9);
-
-	//Cross Checking 
-	unsigned char* crosscheck = Cross_checking(disparity_image_right, disparity_image, width / 4, height / 4, 8);
 	
+	//Cross Checking & occlusion filling
+	unsigned char* crosscheck = Cross_checking(disparity_image_right, disparity_image, width / 4, height / 4, 8);
+	unsigned char* occlusion = Occlusion_filling_v2(crosscheck, width / 4, height / 4); 
 
 
 	////////////////////////////////////////ENCODING PART /////////////////////////////////////////////////////////
@@ -241,7 +355,11 @@ int main() {
 	//Encode Cross_checking
 	const char* cross_file = "img/cross.png"; 
 	error3 = lodepng_encode_file(cross_file, crosscheck, width / 4, height / 4, colortype, bitdepth);
-
+	if (error3) std::cout << "encoder error" << error3 << ":" << lodepng_error_text(error3) << std::endl;
+	//Encode Occlusion 
+	const char* occlusion_file = "img/occlusionv2.png";
+	error3 = lodepng_encode_file(occlusion_file, occlusion, width / 4, height / 4, colortype, bitdepth);
+	if (error3) std::cout << "encoder error" << error3 << ":" << lodepng_error_text(error3) << std::endl;
 
 	//Encode image 32 
 	/*
