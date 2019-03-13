@@ -5,6 +5,7 @@
 #include<vector>
 #include "lodepng.h"
 #include <cmath>
+#include <windows.h>
 
 unsigned char* change_size_RGBA(unsigned char* imagein,int width,int height) {
 	// imagein(unsigned char*) image to reduct; RGBA
@@ -75,7 +76,7 @@ unsigned char* ZNCC(unsigned char* imageR,unsigned char* imageL,int width,int he
 	
 	for (int j = win_half_value; j < (height- win_half_value); j++) {
 		
-		for (int i =win_half_value; i < (width - win_half_value);i++) {
+		for (int i =win_size; i < (width - win_half_value);i++) {
 			float max_sum = 0; // best sum
 			int best_d = 0; //best disparity value
 			for (int d = 0; d < disp_max; d++) {
@@ -127,7 +128,7 @@ unsigned char* ZNCC2(unsigned char* imageR, unsigned char* imageL, int width, in
 
 	for (int j = win_half_value; j < (height - win_half_value); j++) {
 
-		for (int i = win_half_value; i < (width - win_half_value);i++) {
+		for (int i = win_half_value; i < (width - win_size);i++) {
 			float max_sum = 0; // best sum
 			int best_d = 0; //best disparity value
 			for (int d = 0; d < disp_max; d++) {
@@ -249,17 +250,20 @@ unsigned char* Occlusion_filling_v2(unsigned char* crossimage, int width, int he
 					if ((h - d) > 0) {
 						if (crossimage[(h - d)*width + w] != 0) {
 							output[h*width + w] = crossimage[(h - d)*width + w];
+							test = true;
 							break;
 						}
 						else if ((w + d) < width) {
 							if (crossimage[(h - d)*width + w + d] != 0) {
 								output[h*width + w] = crossimage[(h - d)*width + w + d];
+								test = true;
 								break;
 							}
 						}
 						else if ((w - d) > 0) {
 							if (crossimage[(h - d)*width + w - d] != 0) {
 								output[h*width + w] = crossimage[(h - d)*width + w - d];
+								test = true;
 								break;
 							}
 						}
@@ -267,17 +271,20 @@ unsigned char* Occlusion_filling_v2(unsigned char* crossimage, int width, int he
 					else if (h + d < height) {
 						if (crossimage[(h + d)*width + w] != 0) {
 							output[h*width + w] = crossimage[(h + d)*width + w];
+							test = true;
 							break;
 						}
 						else if ((w + d) < width) {
 							if (crossimage[(h + d)*width + w + d] != 0) {
 								output[h*width + w] = crossimage[(h + d)*width + w + d];
+								test = true;
 								break;
 							}
 						}
 						else if ((w - d) > 0) {
 							if (crossimage[(h + d)*width + w - d] != 0) {
 								output[h*width + w] = crossimage[(h + d)*width + w - d];
+								test = true;
 								break;
 							}
 						}
@@ -294,12 +301,28 @@ unsigned char* Occlusion_filling_v2(unsigned char* crossimage, int width, int he
 	}
 	return output;
 }
-				
 
+double GetCounter(double PCFreq, _int64 CounterStart)
+{
+	//source https://stackoverflow.com/questions/1739259/how-to-use-queryperformancecounter
+	LARGE_INTEGER end;
+	QueryPerformanceCounter(&end);
+	return double(end.QuadPart - CounterStart) / PCFreq;
+}
 							
 
 
-int main() {
+int main() { 
+	//Implement counter 
+	LARGE_INTEGER li;
+	if (!QueryPerformanceFrequency(&li))
+		std::cout << "QueryPerformanceFrequency failed!" << std::endl;
+
+	double PCFreq = double(li.QuadPart) / 1000.0;
+
+	QueryPerformanceCounter(&li);
+	__int64 CounterStart = li.QuadPart;
+	
 	//Decode the image, source lodepng.h example
 
 	const char* filename = "img/im0.png";
@@ -360,7 +383,7 @@ int main() {
 	const char* occlusion_file = "img/occlusionv2.png";
 	error3 = lodepng_encode_file(occlusion_file, occlusion, width / 4, height / 4, colortype, bitdepth);
 	if (error3) std::cout << "encoder error" << error3 << ":" << lodepng_error_text(error3) << std::endl;
-
+	std::cout<<"time"<<GetCounter(PCFreq, CounterStart);
 	//Encode image 32 
 	/*
 	const char * filename3 = "img/imtest2.png";
