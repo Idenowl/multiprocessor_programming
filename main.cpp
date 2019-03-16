@@ -49,28 +49,35 @@ unsigned char* change_size_RGB(unsigned char* imagein, int width, int height) {
 	unsigned char* imgreduct = (unsigned char*)malloc(width*height * 3 * sizeof(char));
 	int k = 0;
 	int tid;
-	#pragma omp parallel private(tid,k) num_threads(4)
+	int j=0;
+	/*#pragma omp parallel private(tid,k,j) num_threads(4)
 	{
 		tid = omp_get_thread_num();
 		int nbthreads = omp_get_num_threads();
-		k = (height*width) / nbthreads * tid;
-		#pragma omp for 
+		//k = (3*height/4*width/4+3*width/4+2) / nbthreads * tid;
+		k = (width/4) / nbthreads * tid;
+		j = (height / 4) / nbthreads * tid;
+		//#pragma omp for 
+		//#pragma omp for
+		*/
 		for (int h = 0; h < height; h = h + 4) {
+         
 			for (int w = 0; w < width; w = w + 4) {
-
 				//4 channels, RGBA make one pixel 
 				// In the image(char*) we have the several lines one after the other
 				//4*actual number of the line*width of one line+ 4* actual position in the line +channel (R=0 G B or A )
+
 				imgreduct[k] = imagein[4 * width* h + 4 * w]; //R
-				imgreduct[k + 1] = imagein[4 * width*h + 4 * w + 1]; //G
-				imgreduct[k + 2] = imagein[4 * width*h + 4 * w + 2];//B
+				imgreduct[k+1] = imagein[4 * width*h + 4 * w + 1]; //G
+				imgreduct[k+2] = imagein[4 * width*h + 4 * w + 2];//B
 				k = k + 3;
 
+				//j = j + 3;
 
 			}
 
 		}
-	}
+	//}
 		
 	return imgreduct;
 }
