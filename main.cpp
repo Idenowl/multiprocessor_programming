@@ -93,8 +93,7 @@ unsigned char* ZNCC(unsigned char* imageR,unsigned char* imageL,int width,int he
 	float sum_varR;
 	float sum_varL;
 	float ZNCC_value;
-	omp_lock_t lock;
-	omp_init_lock(&lock);
+	
 	
 	int win_half_value = 0.5 * (win_size - 1); 
 
@@ -138,9 +137,9 @@ unsigned char* ZNCC(unsigned char* imageR,unsigned char* imageL,int width,int he
 						best_d = d;
 					}
 				}
-				omp_set_lock;
+				
 				disparity_image[width*j + i] = int(best_d * 255 / (disp_max));
-				omp_unset_lock;
+				
 			
 		}
 	}
@@ -159,8 +158,7 @@ unsigned char* ZNCC2(unsigned char* imageR, unsigned char* imageL, int width, in
 	float sum_varR;
 	float sum_varL;
 	float ZNCC_value;
-	omp_lock_t lock;
-	omp_init_lock(&lock);
+	
 
 	int win_half_value = 0.5 * (win_size - 1);
 	
@@ -202,9 +200,9 @@ unsigned char* ZNCC2(unsigned char* imageR, unsigned char* imageL, int width, in
 					best_d = d;
 				}
 			}
-			omp_set_lock;
+			
 			disparity_image[width*j + i] = int(best_d * 255 / (disp_max));
-			omp_unset_lock;
+			
 		}
 	}
 	return disparity_image;
@@ -212,21 +210,20 @@ unsigned char* ZNCC2(unsigned char* imageR, unsigned char* imageL, int width, in
 unsigned char* Cross_checking(unsigned char* disparityR, unsigned char* disparityL, int width, int height, int threshold) {
 	unsigned char* output = (unsigned char*)malloc(width*height);
 	int difference; 
-	omp_lock_t lock;
-	omp_init_lock(&lock);
+	
 	#pragma omp parallel for private (difference) shared (output) num_threads(4)
 	for (int h = 0; h < height; h++) {
 		for (int w = 0; w < width; w++) {
 			difference = std::abs(disparityR[h*width + w] - disparityL[h*width + w]);
 			if (difference > threshold) {
-				//omp_set_lock;
+				
 				output[h*width + w] = 0;
-				//omp_unset_lock;
+				
 			}
 			else {
-				//omp_set_lock;
+				
 				output[h*width + w] = disparityL[h*width + w];
-				//omp_unset_lock;
+				
 			}
 		}
 
