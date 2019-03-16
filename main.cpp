@@ -1,4 +1,4 @@
-#
+
 #include<iostream>
 #include<iostream>
 #include<string>
@@ -6,41 +6,38 @@
 #include "lodepng.h"
 #include <cmath>
 #include <windows.h>
+#include <omp.h>
 
-unsigned char* change_size_RGBA(unsigned char* imagein,int width,int height) {
-	// imagein(unsigned char*) image to reduct; RGBA
+
+unsigned char* RGB_to_grey(unsigned char* imagein, int width, int height) {
+	// imagein(unsigned char*) image to change, input in RGB
 	// width, initial width of the image to reduct 
 	// height initial height of the image to reduc 
 	
-	unsigned char* imgreduct = (unsigned char*)malloc(width*height * 4 *sizeof(char));
-	int k = 0; 
-	for (int h = 0; h < height; h = h + 4) {
-		for (int w= 0; w< width ; w = w + 4) {
-			//4 channels, RGBA make one pixel 
-			// In the image(char*) we have the several lines one after the other
-			//4*actual number of the line*width of one line+ 4* actual position in the line +channel (R=0 G B or A )
-			imgreduct [k] = imagein [4* width* h + 4* w ]; //R
-			imgreduct[k + 1] = imagein[4*width*h +4* w + 1]; //G
-			imgreduct[k + 2] = imagein[4*width*h + 4*w + 2];//B
-			imgreduct[k + 3] = imagein[4*width*h +4* w + 3];//A
-			k = k + 4;
-		}
-	
-	}
-
-	return imgreduct;
-}
-unsigned char* RGB_to_grey(unsigned char* imagein, int width, int height) {
 	unsigned char* imggrey = (unsigned char*)malloc(width*height*3*sizeof(char));
-	int k = 0;
-	for (int h = 0; h < height; h = h +1) {
-		for (int w = 0; w < width; w = w + 1) {
-			
-			imggrey[k] = 0.2126*imagein[3 * width* h + 3 * w] + 0.7152*imagein[3 * width* h + 3 * w + 1] + 0.0722*imagein[3 * width* h + 3 * w + 2];
-			k = k + 1;
-			
+	int k=0;
+	int v;
+	int tid;
+	
+	
+#pragma omp parallel private(v,tid,k) num_threads(4)
+	{
+		tid = omp_get_thread_num();
+		int nbthreads = omp_get_num_threads();
+		k= (height*width) / nbthreads * tid;
+#pragma omp for 
+		for (int h = 0; h < height; h = h + 1) {
+
+			for (int w = 0; w < width; w = w + 1) {
+
+				imggrey[k] = 0.2126*imagein[3 * width* h + 3 * w] + 0.7152*imagein[3 * width* h + 3 * w + 1] + 0.0722*imagein[3 * width* h + 3 * w + 2];
+
+				k = k + 1;
+
+			}
 		}
 	}
+	
 	return imggrey;
 }
 
@@ -51,68 +48,92 @@ unsigned char* change_size_RGB(unsigned char* imagein, int width, int height) {
 
 	unsigned char* imgreduct = (unsigned char*)malloc(width*height * 3 * sizeof(char));
 	int k = 0;
-	for (int h = 0; h < height; h = h + 4) {
-		for (int w = 0; w < width; w = w + 4) {
-			//4 channels, RGBA make one pixel 
-			// In the image(char*) we have the several lines one after the other
-			//4*actual number of the line*width of one line+ 4* actual position in the line +channel (R=0 G B or A )
-			imgreduct[k] = imagein[4 * width* h + 4 * w]; //R
-			imgreduct[k + 1] = imagein[4 * width*h + 4 * w + 1]; //G
-			imgreduct[k + 2] = imagein[4 * width*h + 4 * w + 2];//B
-			k = k + 3;
+	int tid;
+	#pragma omp parallel private(tid,k) num_threads(4)
+	{
+		tid = omp_get_thread_num();
+		int nbthreads = omp_get_num_threads();
+		k = (height*width) / nbthreads * tid;
+		#pragma omp for 
+		for (int h = 0; h < height; h = h + 4) {
+			for (int w = 0; w < width; w = w + 4) {
+
+				//4 channels, RGBA make one pixel 
+				// In the image(char*) we have the several lines one after the other
+				//4*actual number of the line*width of one line+ 4* actual position in the line +channel (R=0 G B or A )
+				imgreduct[k] = imagein[4 * width* h + 4 * w]; //R
+				imgreduct[k + 1] = imagein[4 * width*h + 4 * w + 1]; //G
+				imgreduct[k + 2] = imagein[4 * width*h + 4 * w + 2];//B
+				k = k + 3;
+
+
+			}
+
 		}
-
 	}
-
+		
 	return imgreduct;
 }
 unsigned char* ZNCC(unsigned char* imageR,unsigned char* imageL,int width,int height,int disp_max,int win_size) {
 	//unsigned char* meanR =(unsigned char*)malloc(width*height); 
 	//unsigned char* meanL =(unsigned char*)malloc(width*height);
 	unsigned char* disparity_image = (unsigned char*)malloc(width*height);
-	
+	float max_sum;
+	int best_d; 
+	int meanR; 
+	int meanL;
+	int sum_mean;
+	float sum_varR;
+	float sum_varL;
+	float ZNCC_value;
+	omp_lock_t lock;
+	omp_init_lock(&lock);
 	
 	int win_half_value = 0.5 * (win_size - 1); 
-	
+
 	for (int j = win_half_value; j < (height- win_half_value); j++) {
+	
+#pragma omp parallel for private (max_sum,best_d,meanR,meanL,sum_mean,sum_varL,sum_varR,ZNCC_value) shared (disparity_image) num_threads(4)
 		
-		for (int i =win_size; i < (width - win_half_value);i++) {
-			float max_sum = 0; // best sum
-			int best_d = 0; //best disparity value
-			for (int d = 0; d < disp_max; d++) {
-				int meanR = 0; //mean image right
-				int meanL = 0; //mean image left
-				 
-				for (int win_y = -win_half_value; win_y <= win_half_value; win_y++) {
-					for (int win_x= -win_half_value; win_x <= win_half_value; win_x++) {
-						
-						meanR+=int(imageR[width*(j+win_y )+ i+win_x - d]);
-						meanL+=int(imageL[width*(j + win_y) + i+win_x]);
-						
+			for (int i = win_size; i < (width - win_half_value);i++) {
+				max_sum = 0; // best sum
+				best_d = 0; //best disparity value
+				for (int d = 0; d < disp_max; d++) {
+					meanR = 0; //mean image right
+					meanL = 0; //mean image left
+
+					for (int win_y = -win_half_value; win_y <= win_half_value; win_y++) {
+						for (int win_x = -win_half_value; win_x <= win_half_value; win_x++) {
+
+							meanR += int(imageR[width*(j + win_y) + i + win_x - d]);
+							meanL += int(imageL[width*(j + win_y) + i + win_x]);
+
+						}
+					}
+					meanR = meanR / (win_size*win_size);
+					meanL = meanL / (win_size*win_size);
+
+					int sum_mean = 0;
+					float sum_varR = 0;
+					float sum_varL = 0;
+					for (int win_y = -win_half_value; win_y <= win_half_value; win_y++) {
+						for (int win_x = -win_half_value; win_x <= win_half_value; win_x++) {
+							sum_mean += (imageL[width*(j + win_y) + i + win_x] - meanL)*(imageR[width*(j + win_y) + i + win_x - d] - meanR);
+							sum_varL += (imageL[width*(j + win_y) + i + win_x] - meanL)*(imageL[width*(j + win_y) + i + win_x] - meanL);
+							sum_varR += (imageR[width*(j + win_y) + i + win_x - d] - meanR)*(imageR[width*(j + win_y) + i + win_x - d] - meanR);
+
+						}
+					}
+					ZNCC_value = sum_mean / (sqrt(sum_varR)*sqrt(sum_varL));
+
+					if (ZNCC_value > max_sum) {
+						max_sum = ZNCC_value;
+						best_d = d;
 					}
 				}
-				meanR = meanR / (win_size*win_size);
-				meanL = meanL / (win_size*win_size);
-				
-				int sum_mean = 0;
-				float sum_varR = 0; 
-				float sum_varL = 0;
-				for (int win_y = -win_half_value; win_y <= win_half_value; win_y++) {
-					for (int win_x = -win_half_value; win_x <= win_half_value; win_x++) {
-						sum_mean += (imageL[width*(j+win_y) + i+win_x] - meanL)*(imageR[width*(j+win_y) + i+win_x - d] - meanR);
-						sum_varL += (imageL[width*(j + win_y) + i + win_x] - meanL)*(imageL[width*(j + win_y) + i + win_x] - meanL);
-						sum_varR += (imageR[width*(j + win_y) + i + win_x - d] - meanR)*(imageR[width*(j + win_y) + i + win_x - d] - meanR);
-						
-					}
-				}
-				float ZNCC_value = sum_mean / (sqrt(sum_varR)*sqrt(sum_varL));
-				
-					if (ZNCC_value > max_sum){
-						max_sum = ZNCC_value; 
-						best_d = d; 
-					}
-			}
-			disparity_image[width*j + i] =int(best_d*255/(disp_max));
+				omp_set_lock;
+				disparity_image[width*j + i] = int(best_d * 255 / (disp_max));
+				omp_unset_lock;
 			
 		}
 	}
@@ -122,18 +143,28 @@ unsigned char* ZNCC2(unsigned char* imageR, unsigned char* imageL, int width, in
 	//unsigned char* meanR =(unsigned char*)malloc(width*height); 
 	//unsigned char* meanL =(unsigned char*)malloc(width*height);
 	unsigned char* disparity_image = (unsigned char*)malloc(width*height);
-
+	
+	float max_sum;
+	int best_d;
+	int meanR;
+	int meanL;
+	int sum_mean;
+	float sum_varR;
+	float sum_varL;
+	float ZNCC_value;
+	omp_lock_t lock;
+	omp_init_lock(&lock);
 
 	int win_half_value = 0.5 * (win_size - 1);
-
+	
 	for (int j = win_half_value; j < (height - win_half_value); j++) {
-
+	#pragma omp parallel for private (max_sum,best_d,meanR,meanL,sum_mean,sum_varL,sum_varR,ZNCC_value) shared (disparity_image) num_threads(4)
 		for (int i = win_half_value; i < (width - win_size);i++) {
-			float max_sum = 0; // best sum
-			int best_d = 0; //best disparity value
+			max_sum = 0; // best sum
+			best_d = 0; //best disparity value
 			for (int d = 0; d < disp_max; d++) {
-				int meanR = 0; //mean image right
-				int meanL = 0; //mean image left
+				meanR = 0; //mean image right
+				meanL = 0; //mean image left
 
 				for (int win_y = -win_half_value; win_y <= win_half_value; win_y++) {
 					for (int win_x = -win_half_value; win_x <= win_half_value; win_x++) {
@@ -146,9 +177,9 @@ unsigned char* ZNCC2(unsigned char* imageR, unsigned char* imageL, int width, in
 				meanR = meanR / (win_size*win_size);
 				meanL = meanL / (win_size*win_size);
 
-				int sum_mean = 0;
-				float sum_varR = 0;
-				float sum_varL = 0;
+				sum_mean = 0;
+				sum_varR = 0;
+				sum_varL = 0;
 				for (int win_y = -win_half_value; win_y <= win_half_value; win_y++) {
 					for (int win_x = -win_half_value; win_x <= win_half_value; win_x++) {
 						sum_mean += (imageL[width*(j + win_y) + i + win_x+ d] - meanL)*(imageR[width*(j + win_y) + i + win_x] - meanR);
@@ -157,29 +188,38 @@ unsigned char* ZNCC2(unsigned char* imageR, unsigned char* imageL, int width, in
 
 					}
 				}
-				float ZNCC_value = sum_mean / (sqrt(sum_varR)*sqrt(sum_varL));
+				ZNCC_value = sum_mean / (sqrt(sum_varR)*sqrt(sum_varL));
 
 				if (ZNCC_value > max_sum) {
 					max_sum = ZNCC_value;
 					best_d = d;
 				}
 			}
+			omp_set_lock;
 			disparity_image[width*j + i] = int(best_d * 255 / (disp_max));
-
+			omp_unset_lock;
 		}
 	}
 	return disparity_image;
 }
 unsigned char* Cross_checking(unsigned char* disparityR, unsigned char* disparityL, int width, int height, int threshold) {
 	unsigned char* output = (unsigned char*)malloc(width*height);
+	int difference; 
+	omp_lock_t lock;
+	omp_init_lock(&lock);
+	#pragma omp parallel for private (difference) shared (output) num_threads(4)
 	for (int h = 0; h < height; h++) {
 		for (int w = 0; w < width; w++) {
-			int difference = std::abs(disparityR[h*width + w] - disparityL[h*width + w]);
+			difference = std::abs(disparityR[h*width + w] - disparityL[h*width + w]);
 			if (difference > threshold) {
+				//omp_set_lock;
 				output[h*width + w] = 0;
+				//omp_unset_lock;
 			}
 			else {
+				//omp_set_lock;
 				output[h*width + w] = disparityL[h*width + w];
+				//omp_unset_lock;
 			}
 		}
 
@@ -188,10 +228,13 @@ unsigned char* Cross_checking(unsigned char* disparityR, unsigned char* disparit
 }
 
 unsigned char* Occlusion_filling(unsigned char* crossimage, int width, int height) {
+	unsigned char* output = (unsigned char*)malloc(width*height);
+	int d;
+	#pragma omp parallel for private (d) shared (output) num_threads(4)
 	for (int h = 0; h < height; h++) {
 		for (int w = 0; w < width; w++) {
 			if (crossimage[h*width + w] == 0) {
-				int d = 1;
+				d = 1;
 				while (crossimage[h*width + w] == 0) {
 					if ((h - d) > 0) {
 						if (crossimage[(h - d)*width + w] != 0) {
@@ -228,8 +271,9 @@ unsigned char* Occlusion_filling(unsigned char* crossimage, int width, int heigh
 								break;
 							}
 						}
-
+						
 					}
+					
 					d++;
 				}
 			}
@@ -241,12 +285,28 @@ unsigned char* Occlusion_filling(unsigned char* crossimage, int width, int heigh
 
 unsigned char* Occlusion_filling_v2(unsigned char* crossimage, int width, int height) {
 	unsigned char* output = (unsigned char*)malloc(width*height);
+	int d; 
+	bool test;
+	#pragma omp parallel for private (d,test) shared (output) num_threads(4)
 	for (int h = 0; h < height; h++) {
 		for (int w = 0; w < width; w++) {
 			if (crossimage[h*width + w] == 0) {
-				int d = 1;
+				d = 1;
 				bool test = false; 
 				while (test == false) {
+					if (w + d < width) {
+						if (crossimage[(h)*width + w+d] != 0){
+							output[h*width + w] = crossimage[h*width + w + d];
+							break;
+						}
+						
+					}
+					if (w - d > 0) {
+						if (crossimage[(h)*width + w - d] != 0){
+							output[h*width + w] = crossimage[h*width + w - d];
+							break;
+						}
+					}
 					if ((h - d) > 0) {
 						if (crossimage[(h - d)*width + w] != 0) {
 							output[h*width + w] = crossimage[(h - d)*width + w];
@@ -290,6 +350,7 @@ unsigned char* Occlusion_filling_v2(unsigned char* crossimage, int width, int he
 						}
 
 					}
+					
 					d++;
 				}
 			}
@@ -318,7 +379,7 @@ int main() {
 	if (!QueryPerformanceFrequency(&li))
 		std::cout << "QueryPerformanceFrequency failed!" << std::endl;
 
-	double PCFreq = double(li.QuadPart) / 1000.0;
+	double PCFreq = double(li.QuadPart);
 
 	QueryPerformanceCounter(&li);
 	__int64 CounterStart = li.QuadPart;
@@ -347,7 +408,7 @@ int main() {
 
 	unsigned char* imgreduct1 = change_size_RGB(image1, width, height);
 	unsigned char* imggrey1 = RGB_to_grey(imgreduct1, width / 4, height / 4);
-
+	
 	//ZNCC algorithm 
 	unsigned char* disparity_image = ZNCC(imggrey1, imggrey, width / 4, height / 4, 65, 9);
 	unsigned char* disparity_image_right = ZNCC2(imggrey1, imggrey, width / 4, height / 4, 65, 9);
@@ -355,8 +416,8 @@ int main() {
 	//Cross Checking & occlusion filling
 	unsigned char* crosscheck = Cross_checking(disparity_image_right, disparity_image, width / 4, height / 4, 8);
 	unsigned char* occlusion = Occlusion_filling_v2(crosscheck, width / 4, height / 4); 
-
-
+	
+	
 	////////////////////////////////////////ENCODING PART /////////////////////////////////////////////////////////
 	//Encode the grey image 
 	const char* filename2 = "img/imtest.png";
@@ -367,6 +428,7 @@ int main() {
 	unsigned error3 = lodepng_encode_file(filename2, imggrey, width / 4, height / 4, colortype, bitdepth);
 	if (error3) std::cout << "encoder error" << error3 << ":" << lodepng_error_text(error3) << std::endl;
 
+	
 	
 	//Encode the disparity image 
 	const char* filename4 = "img/disparity.png";
@@ -384,11 +446,13 @@ int main() {
 	error3 = lodepng_encode_file(occlusion_file, occlusion, width / 4, height / 4, colortype, bitdepth);
 	if (error3) std::cout << "encoder error" << error3 << ":" << lodepng_error_text(error3) << std::endl;
 	std::cout<<"time"<<GetCounter(PCFreq, CounterStart);
+	
 	//Encode image 32 
 	/*
 	const char * filename3 = "img/imtest2.png";
 	unsigned error4 = lodepng_encode32_file(filename3,imgreduct, width/4, height/4);
 	if (error4)std::cout << "encoder error" << error4 << ":" << lodepng_error_text(error4) << std::endl;
 	return 0;
-*/
+	*/
+
 }
