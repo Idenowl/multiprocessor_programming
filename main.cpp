@@ -8,12 +8,12 @@
 #include <omp.h>
 
 
-void RGB_to_grey(unsigned char* imagein, int width, int height,unsigned char* &imggrey) {
+void RGB_to_grey(unsigned char* imagein, int width, int height, unsigned char* &imggrey) {
 	// imagein(unsigned char*) image to change, input in RGB
 	// width, initial width of the image to reduct 
 	// height initial height of the image to reduc 
 
-	
+
 	int k = 0;
 	int v;
 	int tid;
@@ -29,9 +29,9 @@ void RGB_to_grey(unsigned char* imagein, int width, int height,unsigned char* &i
 
 			for (int w = 0; w < width; w = w + 1) {
 
-				imggrey[k] = 0.2126*imagein[3 * width* h + 3 * w] + 0.7152*imagein[3 * width* h + 3 * w + 1] + 0.0722*imagein[3 * width* h + 3 * w + 2];
+				imggrey[width* h +w] = 0.2126*imagein[3 * width* h + 3 * w] + 0.7152*imagein[3 * width* h + 3 * w + 1] + 0.0722*imagein[3 * width* h + 3 * w + 2];
 
-				k = k + 1;
+				//k = k + 1;
 
 			}
 		}
@@ -40,12 +40,12 @@ void RGB_to_grey(unsigned char* imagein, int width, int height,unsigned char* &i
 	//return imggrey;
 }
 
-void change_size_RGB(unsigned char* imagein, int width, int height,unsigned char* &imgreduct) {
+void change_size_RGB(unsigned char* imagein, int width, int height, unsigned char* &imgreduct) {
 	// imagein(unsigned char*) image to reduct; RGBA
 	// width, initial width of the image to reduct 
 	// height initial height of the image to reduc 
 
-	
+
 	int k = 0;
 	int tid;
 	int j = 0;
@@ -59,17 +59,17 @@ void change_size_RGB(unsigned char* imagein, int width, int height,unsigned char
 		//#pragma omp for
 		//#pragma omp for
 		*/
-	for (int h = 0; h < height; h = h + 4) {
+	for (int h = 0; h < (height/4); h = h + 1) {
 
-		for (int w = 0; w < width; w = w + 4) {
+		for (int w = 0; w < (width/4); w = w + 1) {
 			//4 channels, RGBA make one pixel 
 			// In the image(char*) we have the several lines one after the other
 			//4*actual number of the line*width of one line+ 4* actual position in the line +channel (R=0 G B or A )
 
-			imgreduct[k] = imagein[4 * width* h + 4 * w]; //R
-			imgreduct[k + 1] = imagein[4 * width*h + 4 * w + 1]; //G
-			imgreduct[k + 2] = imagein[4 * width*h + 4 * w + 2];//B
-			k = k + 3;
+			imgreduct[3 * width* h + 3 * w] = imagein[4 * width* h*4 + 4 * w*4]; //R
+			imgreduct[3 * width* h + 3 * w+1] = imagein[4 * width*h*4 + 4 * w*4 + 1]; //G
+			imgreduct[3 * width* h + 3 * w + 1] = imagein[4 * width*h*4 + 4 * w*4 + 2];//B
+			//k = k + 3;
 
 			//j = j + 3;
 
@@ -80,10 +80,10 @@ void change_size_RGB(unsigned char* imagein, int width, int height,unsigned char
 
 	//return imgreduct;
 }
-void* ZNCC(unsigned char* imageR, unsigned char* imageL, int width, int height, int disp_max, int win_size,unsigned char* &disparity_image) {
+void* ZNCC(unsigned char* imageR, unsigned char* imageL, int width, int height, int disp_max, int win_size, unsigned char* &disparity_image) {
 	//unsigned char* meanR =(unsigned char*)malloc(width*height); 
 	//unsigned char* meanL =(unsigned char*)malloc(width*height);
-	
+
 	float max_sum;
 	int best_d;
 	int meanR;
@@ -147,7 +147,7 @@ void* ZNCC(unsigned char* imageR, unsigned char* imageL, int width, int height, 
 void ZNCC2(unsigned char* imageR, unsigned char* imageL, int width, int height, int disp_max, int win_size, unsigned char* &disparity_image) {
 	//unsigned char* meanR =(unsigned char*)malloc(width*height); 
 	//unsigned char* meanL =(unsigned char*)malloc(width*height);
-	
+
 
 	float max_sum;
 	int best_d;
@@ -207,7 +207,7 @@ void ZNCC2(unsigned char* imageR, unsigned char* imageL, int width, int height, 
 	//return disparity_image;
 }
 void Cross_checking(unsigned char* disparityR, unsigned char* disparityL, int width, int height, int threshold, unsigned char* &output) {
-	
+
 	int difference;
 
 #pragma omp parallel for private (difference) shared (output) num_threads(4)
@@ -287,7 +287,7 @@ unsigned char* Occlusion_filling(unsigned char* crossimage, int width, int heigh
 }
 
 void Occlusion_filling_v2(unsigned char* crossimage, int width, int height, unsigned char* &output) {
-	
+
 	int d;
 	bool test;
 #pragma omp parallel for private (d,test) shared (output) num_threads(4)
@@ -407,26 +407,26 @@ int main() {
 
 	//Processing 
 	unsigned char* imgreduct = (unsigned char*)malloc(width*height * 3 * sizeof(char));
-	change_size_RGB(image, width, height,imgreduct);
-	unsigned char* imggrey = (unsigned char*)malloc(width/4*height/4 * 3 * sizeof(char));
-	RGB_to_grey(imgreduct, width / 4, height / 4,imggrey);
+	change_size_RGB(image, width, height, imgreduct);
+	unsigned char* imggrey = (unsigned char*)malloc(width / 4 * height / 4 * 3 * sizeof(char));
+	RGB_to_grey(imgreduct, width / 4, height / 4, imggrey);
 
-	unsigned char* imgreduct1= (unsigned char*)malloc(width*height * 3 * sizeof(char));
-	change_size_RGB(image1, width, height,imgreduct1);
+	unsigned char* imgreduct1 = (unsigned char*)malloc(width*height * 3 * sizeof(char));
+	change_size_RGB(image1, width, height, imgreduct1);
 	unsigned char* imggrey1 = (unsigned char*)malloc(width / 4 * height / 4 * 3 * sizeof(char));
-	RGB_to_grey(imgreduct1, width / 4, height / 4,imggrey1);
+	RGB_to_grey(imgreduct1, width / 4, height / 4, imggrey1);
 
 	//ZNCC algorithm 
-	unsigned char* disparity_image = (unsigned char*)malloc(width/4*height/4);
-	ZNCC(imggrey1, imggrey, width / 4, height / 4, 65, 9,disparity_image);
-	unsigned char* disparity_image_right = (unsigned char*)malloc(width/4*height/4);
-	ZNCC2(imggrey1, imggrey, width / 4, height / 4, 65, 9,disparity_image_right);
+	unsigned char* disparity_image = (unsigned char*)malloc(width / 4 * height / 4);
+	ZNCC(imggrey1, imggrey, width / 4, height / 4, 65, 9, disparity_image);
+	unsigned char* disparity_image_right = (unsigned char*)malloc(width / 4 * height / 4);
+	ZNCC2(imggrey1, imggrey, width / 4, height / 4, 65, 9, disparity_image_right);
 
 	//Cross Checking & occlusion filling
-	unsigned char* crosscheck = (unsigned char*)malloc(width/4*height/4);
-	Cross_checking(disparity_image_right, disparity_image, width / 4, height / 4, 8,crosscheck);
-	unsigned char* occlusion = (unsigned char*)malloc(width/4*height/4);
-	Occlusion_filling_v2(crosscheck, width / 4, height / 4,occlusion);
+	unsigned char* crosscheck = (unsigned char*)malloc(width / 4 * height / 4);
+	Cross_checking(disparity_image_right, disparity_image, width / 4, height / 4, 8, crosscheck);
+	unsigned char* occlusion = (unsigned char*)malloc(width / 4 * height / 4);
+	Occlusion_filling_v2(crosscheck, width / 4, height / 4, occlusion);
 
 
 	////////////////////////////////////////ENCODING PART /////////////////////////////////////////////////////////
@@ -463,12 +463,5 @@ int main() {
 	free(imggrey);
 	free(imggrey1);
 	free(disparity_image);
-	//Encode image 32 
-	/*
-	const char * filename3 = "img/imtest2.png";
-	unsigned error4 = lodepng_encode32_file(filename3,imgreduct, width/4, height/4);
-	if (error4)std::cout << "encoder error" << error4 << ":" << lodepng_error_text(error4) << std::endl;
-	return 0;
-	*/
 
 }
