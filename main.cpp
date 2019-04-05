@@ -66,9 +66,9 @@ void change_size_RGB(unsigned char* imagein, int width, int height, unsigned cha
 			// In the image(char*) we have the several lines one after the other
 			//4*actual number of the line*width of one line+ 4* actual position in the line +channel (R=0 G B or A )
 
-			imgreduct[3 * width* h + 3 * w] = imagein[4 * width* h*4 + 4 * w*4]; //R
-			imgreduct[3 * width* h + 3 * w+1] = imagein[4 * width*h*4 + 4 * w*4 + 1]; //G
-			imgreduct[3 * width* h + 3 * w + 1] = imagein[4 * width*h*4 + 4 * w*4 + 2];//B
+			imgreduct[3 * width/4* h + 3 * w] = imagein[4 * width* h*4 + 4 * w*4]; //R
+			imgreduct[3 * width/4* h + 3 * w+1] = imagein[4 * width*h*4 + 4 * w*4 + 1]; //G
+			imgreduct[3 * width/4* h + 3 * w + 2] = imagein[4 * width*h*4 + 4 * w*4 + 2];//B
 			//k = k + 3;
 
 			//j = j + 3;
