@@ -1,4 +1,7 @@
-#include<iostream>
+#define __CL_ENABLE_EXCEPTIONS
+#define _CRT_SECURE_NO_DEPRECATE
+#include <CL/opencl.h>
+#include <CL/cl.h>
 #include<iostream>
 #include<string>
 #include<vector>
@@ -7,386 +10,11 @@
 #include <windows.h>
 #include <omp.h>
 
-
-void RGB_to_grey(unsigned char* imagein, int width, int height, unsigned char* &imggrey) {
-	// imagein(unsigned char*) image to change, input in RGB
-	// width, initial width of the image to reduct 
-	// height initial height of the image to reduc 
-
-
-	int k = 0;
-	int v;
-	int tid;
-
-
-#pragma omp parallel private(v,tid,k) num_threads(4)
-	{
-		tid = omp_get_thread_num();
-		int nbthreads = omp_get_num_threads();
-		k = (height*width) / nbthreads * tid;
-#pragma omp for 
-		for (int h = 0; h < height; h = h + 1) {
-
-			for (int w = 0; w < width; w = w + 1) {
-
-				imggrey[width* h +w] = 0.2126*imagein[3 * width* h + 3 * w] + 0.7152*imagein[3 * width* h + 3 * w + 1] + 0.0722*imagein[3 * width* h + 3 * w + 2];
-
-				//k = k + 1;
-
-			}
-		}
-	}
-
-	//return imggrey;
-}
-
-void change_size_RGB(unsigned char* imagein, int width, int height, unsigned char* &imgreduct) {
-	// imagein(unsigned char*) image to reduct; RGBA
-	// width, initial width of the image to reduct 
-	// height initial height of the image to reduc 
-
-
-	int k = 0;
-	int tid;
-	int j = 0;
-	/*#pragma omp parallel private(tid,k,j) num_threads(4)
-	{
-		tid = omp_get_thread_num();
-		int nbthreads = omp_get_num_threads();
-		//k = (3*height/4*width/4+3*width/4+2) / nbthreads * tid;
-		k = (width/4) / nbthreads * tid;
-		j = (height / 4) / nbthreads * tid;
-		//#pragma omp for
-		//#pragma omp for
-		*/
-	for (int h = 0; h < (height/4); h = h + 1) {
-
-		for (int w = 0; w < (width/4); w = w + 1) {
-			//4 channels, RGBA make one pixel 
-			// In the image(char*) we have the several lines one after the other
-			//4*actual number of the line*width of one line+ 4* actual position in the line +channel (R=0 G B or A )
-
-			imgreduct[3 * width/4* h + 3 * w] = imagein[4 * width* h*4 + 4 * w*4]; //R
-			imgreduct[3 * width/4* h + 3 * w+1] = imagein[4 * width*h*4 + 4 * w*4 + 1]; //G
-			imgreduct[3 * width/4* h + 3 * w + 2] = imagein[4 * width*h*4 + 4 * w*4 + 2];//B
-			//k = k + 3;
-
-			//j = j + 3;
-
-		}
-
-	}
-	//}
-
-	//return imgreduct;
-}
-void* ZNCC(unsigned char* imageR, unsigned char* imageL, int width, int height, int disp_max, int win_size, unsigned char* &disparity_image) {
-	//unsigned char* meanR =(unsigned char*)malloc(width*height); 
-	//unsigned char* meanL =(unsigned char*)malloc(width*height);
-
-	float max_sum;
-	int best_d;
-	int meanR;
-	int meanL;
-	int sum_mean;
-	float sum_varR;
-	float sum_varL;
-	float ZNCC_value;
-
-
-	int win_half_value = 0.5 * (win_size - 1);
-
-	for (int j = win_half_value; j < (height - win_half_value); j++) {
-
-#pragma omp parallel for private (max_sum,best_d,meanR,meanL,sum_mean,sum_varL,sum_varR,ZNCC_value) shared (disparity_image) num_threads(4)
-
-		for (int i = win_size; i < (width - win_half_value);i++) {
-			max_sum = 0; // best sum
-			best_d = 0; //best disparity value
-			for (int d = 0; d < disp_max; d++) {
-				meanR = 0; //mean image right
-				meanL = 0; //mean image left
-
-				for (int win_y = -win_half_value; win_y <= win_half_value; win_y++) {
-					for (int win_x = -win_half_value; win_x <= win_half_value; win_x++) {
-
-						meanR += int(imageR[width*(j + win_y) + i + win_x - d]);
-						meanL += int(imageL[width*(j + win_y) + i + win_x]);
-
-					}
-				}
-				meanR = meanR / (win_size*win_size);
-				meanL = meanL / (win_size*win_size);
-
-				int sum_mean = 0;
-				float sum_varR = 0;
-				float sum_varL = 0;
-				for (int win_y = -win_half_value; win_y <= win_half_value; win_y++) {
-					for (int win_x = -win_half_value; win_x <= win_half_value; win_x++) {
-						sum_mean += (imageL[width*(j + win_y) + i + win_x] - meanL)*(imageR[width*(j + win_y) + i + win_x - d] - meanR);
-						sum_varL += (imageL[width*(j + win_y) + i + win_x] - meanL)*(imageL[width*(j + win_y) + i + win_x] - meanL);
-						sum_varR += (imageR[width*(j + win_y) + i + win_x - d] - meanR)*(imageR[width*(j + win_y) + i + win_x - d] - meanR);
-
-					}
-				}
-				ZNCC_value = sum_mean / (sqrt(sum_varR)*sqrt(sum_varL));
-
-				if (ZNCC_value > max_sum) {
-					max_sum = ZNCC_value;
-					best_d = d;
-				}
-			}
-
-			disparity_image[width*j + i] = int(best_d * 255 / (disp_max));
-
-
-		}
-	}
-	//return disparity_image;
-}
-void ZNCC2(unsigned char* imageR, unsigned char* imageL, int width, int height, int disp_max, int win_size, unsigned char* &disparity_image) {
-	//unsigned char* meanR =(unsigned char*)malloc(width*height); 
-	//unsigned char* meanL =(unsigned char*)malloc(width*height);
-
-
-	float max_sum;
-	int best_d;
-	int meanR;
-	int meanL;
-	int sum_mean;
-	float sum_varR;
-	float sum_varL;
-	float ZNCC_value;
-
-
-	int win_half_value = 0.5 * (win_size - 1);
-
-	for (int j = win_half_value; j < (height - win_half_value); j++) {
-#pragma omp parallel for private (max_sum,best_d,meanR,meanL,sum_mean,sum_varL,sum_varR,ZNCC_value) shared (disparity_image) num_threads(4)
-		for (int i = win_half_value; i < (width - win_size);i++) {
-			max_sum = 0; // best sum
-			best_d = 0; //best disparity value
-			for (int d = 0; d < disp_max; d++) {
-				meanR = 0; //mean image right
-				meanL = 0; //mean image left
-
-				for (int win_y = -win_half_value; win_y <= win_half_value; win_y++) {
-					for (int win_x = -win_half_value; win_x <= win_half_value; win_x++) {
-
-						meanR += int(imageR[width*(j + win_y) + i + win_x]);
-						meanL += int(imageL[width*(j + win_y) + i + win_x + d]);
-
-					}
-				}
-				meanR = meanR / (win_size*win_size);
-				meanL = meanL / (win_size*win_size);
-
-				sum_mean = 0;
-				sum_varR = 0;
-				sum_varL = 0;
-				for (int win_y = -win_half_value; win_y <= win_half_value; win_y++) {
-					for (int win_x = -win_half_value; win_x <= win_half_value; win_x++) {
-						sum_mean += (imageL[width*(j + win_y) + i + win_x + d] - meanL)*(imageR[width*(j + win_y) + i + win_x] - meanR);
-						sum_varL += (imageL[width*(j + win_y) + i + win_x + d] - meanL)*(imageL[width*(j + win_y) + i + win_x + d] - meanL);
-						sum_varR += (imageR[width*(j + win_y) + i + win_x] - meanR)*(imageR[width*(j + win_y) + i + win_x] - meanR);
-
-					}
-				}
-				ZNCC_value = sum_mean / (sqrt(sum_varR)*sqrt(sum_varL));
-
-				if (ZNCC_value > max_sum) {
-					max_sum = ZNCC_value;
-					best_d = d;
-				}
-			}
-
-			disparity_image[width*j + i] = int(best_d * 255 / (disp_max));
-
-		}
-	}
-	//return disparity_image;
-}
-void Cross_checking(unsigned char* disparityR, unsigned char* disparityL, int width, int height, int threshold, unsigned char* &output) {
-
-	int difference;
-
-#pragma omp parallel for private (difference) shared (output) num_threads(4)
-	for (int h = 0; h < height; h++) {
-		for (int w = 0; w < width; w++) {
-			difference = std::abs(disparityR[h*width + w] - disparityL[h*width + w]);
-			if (difference > threshold) {
-
-				output[h*width + w] = 0;
-
-			}
-			else {
-
-				output[h*width + w] = disparityL[h*width + w];
-
-			}
-		}
-
-	}
-	//return output;
-}
-
-unsigned char* Occlusion_filling(unsigned char* crossimage, int width, int height) {
-	//unsigned char* output = (unsigned char*)malloc(width*height);
-	int d;
-#pragma omp parallel for private (d) num_threads(4)
-	for (int h = 0; h < height; h++) {
-		for (int w = 0; w < width; w++) {
-			if (crossimage[h*width + w] == 0) {
-				d = 1;
-				while (crossimage[h*width + w] == 0) {
-					if ((h - d) > 0) {
-						if (crossimage[(h - d)*width + w] != 0) {
-							crossimage[h*width + w] = crossimage[(h - d)*width + w];
-							break;
-						}
-						else if ((w + d) < width) {
-							if (crossimage[(h - d)*width + w + d] != 0) {
-								crossimage[h*width + w] = crossimage[(h - d)*width + w + d];
-								break;
-							}
-						}
-						else if ((w - d) > 0) {
-							if (crossimage[(h - d)*width + w - d] != 0) {
-								crossimage[h*width + w] = crossimage[(h - d)*width + w - d];
-								break;
-							}
-						}
-					}
-					else if (h + d < height) {
-						if (crossimage[(h + d)*width + w] != 0) {
-							crossimage[h*width + w] = crossimage[(h + d)*width + w];
-							break;
-						}
-						else if ((w + d) < width) {
-							if (crossimage[(h + d)*width + w + d] != 0) {
-								crossimage[h*width + w] = crossimage[(h + d)*width + w + d];
-								break;
-							}
-						}
-						else if ((w - d) > 0) {
-							if (crossimage[(h + d)*width + w - d] != 0) {
-								crossimage[h*width + w] = crossimage[(h + d)*width + w - d];
-								break;
-							}
-						}
-
-					}
-
-					d++;
-				}
-			}
-		}
-
-	}
-	return crossimage;
-}
-
-void Occlusion_filling_v2(unsigned char* crossimage, int width, int height, unsigned char* &output) {
-
-	int d;
-	bool test;
-#pragma omp parallel for private (d,test) shared (output) num_threads(4)
-	for (int h = 0; h < height; h++) {
-		for (int w = 0; w < width; w++) {
-			if (crossimage[h*width + w] == 0) {
-				d = 1;
-				bool test = false;
-				while (test == false) {
-					if (w + d < width) {
-						if (crossimage[(h)*width + w + d] != 0) {
-							output[h*width + w] = crossimage[h*width + w + d];
-							break;
-						}
-
-					}
-					if (w - d > 0) {
-						if (crossimage[(h)*width + w - d] != 0) {
-							output[h*width + w] = crossimage[h*width + w - d];
-							break;
-						}
-					}
-					if ((h - d) > 0) {
-						if (crossimage[(h - d)*width + w] != 0) {
-							output[h*width + w] = crossimage[(h - d)*width + w];
-							test = true;
-							break;
-						}
-						else if ((w + d) < width) {
-							if (crossimage[(h - d)*width + w + d] != 0) {
-								output[h*width + w] = crossimage[(h - d)*width + w + d];
-								test = true;
-								break;
-							}
-						}
-						else if ((w - d) > 0) {
-							if (crossimage[(h - d)*width + w - d] != 0) {
-								output[h*width + w] = crossimage[(h - d)*width + w - d];
-								test = true;
-								break;
-							}
-						}
-					}
-					else if (h + d < height) {
-						if (crossimage[(h + d)*width + w] != 0) {
-							output[h*width + w] = crossimage[(h + d)*width + w];
-							test = true;
-							break;
-						}
-						else if ((w + d) < width) {
-							if (crossimage[(h + d)*width + w + d] != 0) {
-								output[h*width + w] = crossimage[(h + d)*width + w + d];
-								test = true;
-								break;
-							}
-						}
-						else if ((w - d) > 0) {
-							if (crossimage[(h + d)*width + w - d] != 0) {
-								output[h*width + w] = crossimage[(h + d)*width + w - d];
-								test = true;
-								break;
-							}
-						}
-
-					}
-
-					d++;
-				}
-			}
-			else {
-				output[h*width + w] = crossimage[h*width + w];
-			}
-		}
-
-	}
-	//return output;
-}
-
-double GetCounter(double PCFreq, _int64 CounterStart)
-{
-	//source https://stackoverflow.com/questions/1739259/how-to-use-queryperformancecounter
-	LARGE_INTEGER end;
-	QueryPerformanceCounter(&end);
-	return double(end.QuadPart - CounterStart) / PCFreq;
-}
-
+#define DATA_SIZE (2048)
 
 
 int main() {
-	//Implement counter 
-	LARGE_INTEGER li;
-	if (!QueryPerformanceFrequency(&li))
-		std::cout << "QueryPerformanceFrequency failed!" << std::endl;
-
-	double PCFreq = double(li.QuadPart);
-
-	QueryPerformanceCounter(&li);
-	__int64 CounterStart = li.QuadPart;
-
+	//////////////////////////////////////////////////////////////////////////DECODING IMAGE ////////////////////////////////////////////////////
 	//Decode the image, source lodepng.h example
 
 	const char* filename = "img/im0.png";
@@ -405,63 +33,203 @@ int main() {
 	unsigned error2 = lodepng_decode32_file(&image1, &width, &height, filename1);
 	if (error) std::cout << "decoder error " << error2 << ": " << lodepng_error_text(error2) << std::endl;
 
-	//Processing 
-	unsigned char* imgreduct = (unsigned char*)malloc(width*height * 3 * sizeof(char));
-	change_size_RGB(image, width, height, imgreduct);
-	unsigned char* imggrey = (unsigned char*)malloc(width / 4 * height / 4 * 3 * sizeof(char));
-	RGB_to_grey(imgreduct, width / 4, height / 4, imggrey);
+	////////////////////////////////////////////////////////////////////////////////GET PLATEFORM & DEVICES/////////////////////////////////////////////
 
-	unsigned char* imgreduct1 = (unsigned char*)malloc(width*height * 3 * sizeof(char));
-	change_size_RGB(image1, width, height, imgreduct1);
-	unsigned char* imggrey1 = (unsigned char*)malloc(width / 4 * height / 4 * 3 * sizeof(char));
-	RGB_to_grey(imgreduct1, width / 4, height / 4, imggrey1);
-
-	//ZNCC algorithm 
-	unsigned char* disparity_image = (unsigned char*)malloc(width / 4 * height / 4);
-	ZNCC(imggrey1, imggrey, width / 4, height / 4, 65, 9, disparity_image);
-	unsigned char* disparity_image_right = (unsigned char*)malloc(width / 4 * height / 4);
-	ZNCC2(imggrey1, imggrey, width / 4, height / 4, 65, 9, disparity_image_right);
-
-	//Cross Checking & occlusion filling
-	unsigned char* crosscheck = (unsigned char*)malloc(width / 4 * height / 4);
-	Cross_checking(disparity_image_right, disparity_image, width / 4, height / 4, 8, crosscheck);
-	unsigned char* occlusion = (unsigned char*)malloc(width / 4 * height / 4);
-	Occlusion_filling_v2(crosscheck, width / 4, height / 4, occlusion);
+	int i, j;
+	char* value;
+	size_t valueSize;
+	cl_uint platformCount;
+	cl_platform_id* platforms;
+	cl_uint deviceCount;
+	cl_device_id* devices;
+	cl_ulong localmemsize;
+	cl_device_local_mem_type localmemtype;
+	cl_uint maxComputeUnits;
+	cl_uint maxClockfrequency;
+	cl_ulong maxConstantbuffersize;
+	size_t maxWorkgroupsize;
+	cl_uint maxDimensions;
+	//size_t*  maxWorkitemsize;
 
 
-	////////////////////////////////////////ENCODING PART /////////////////////////////////////////////////////////
-	//Encode the grey image 
-	const char* filename2 = "img/imtest.png";
-	LodePNGColorType colortype = LCT_GREY;
+	//get platform 
+
+	clGetPlatformIDs(0, NULL, &platformCount);
+	platforms = (cl_platform_id*)malloc(sizeof(cl_platform_id) * platformCount);
+	clGetPlatformIDs(platformCount, platforms, NULL);
+	//get devices 
+	clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_GPU, 0, NULL, &deviceCount);
+	devices = (cl_device_id*)malloc(sizeof(cl_device_id) * deviceCount);
+	clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_GPU, deviceCount, devices, NULL);
+	printf("Device count %d\n", deviceCount);
+	char device_string[1024];
+
+
+	//////////////////////////////////////////////////////////////////////////GET DEVICE INFO//////////////////////////////////
+	clGetDeviceInfo(devices[0], CL_DEVICE_NAME, sizeof(device_string), &device_string, NULL);
+	printf("  CL_DEVICE_NAME: \t\t\t%s\n", device_string);
+
+	clGetDeviceInfo(devices[0], CL_DEVICE_LOCAL_MEM_TYPE, sizeof(localmemtype), &localmemtype, NULL);
+	printf("  CL_DEVICE_LOCAL_MEM_TYPE: \t\t\t%u\n", localmemtype);
+
+	clGetDeviceInfo(devices[0], CL_DEVICE_LOCAL_MEM_SIZE, sizeof(localmemsize), &localmemsize, NULL);
+	printf("  CL_DEVICE_LOCAL_MEM_SIZE: \t\t\t%d\n", localmemsize);
+
+	clGetDeviceInfo(devices[0], CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(maxComputeUnits), &maxComputeUnits, NULL);
+	printf("  CL_DEVICE_MAX_COMPUTE_UNITS: \t\t\t%d\n", maxComputeUnits);
+
+	clGetDeviceInfo(devices[0], CL_DEVICE_MAX_CLOCK_FREQUENCY, sizeof(maxClockfrequency), &maxClockfrequency, NULL);
+	printf(" CL_DEVICE_MAX_CLOCK_FREQUENCY: \t\t\t%d\n", maxClockfrequency);
+
+	clGetDeviceInfo(devices[0], CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, sizeof(maxConstantbuffersize), &maxConstantbuffersize, NULL);
+	printf(" CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE: \t\t\t%d\n", maxConstantbuffersize);
+
+	clGetDeviceInfo(devices[0], CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(maxWorkgroupsize), &maxWorkgroupsize, NULL);
+	printf(" CL_DEVICE_MAX_WORK_GROUP_SIZE: \t\t\t%d\n", maxWorkgroupsize);
+
+	clGetDeviceInfo(devices[0], CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS, sizeof(maxDimensions), &maxDimensions, NULL);
+	printf(" CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS: \t\t\t%d\n", maxDimensions);
+
+	//clGetDeviceInfo(devices[0], CL_DEVICE_MAX_WORK_ITEM_SIZES, maxDimensions * sizeof(size_t), &maxWorkitemsize, NULL);
+	//printf(" CL_DEVICE_MAX_WORK_ITEM_SIZES: \t\t\t%d\n", maxWorkitemsize);
+
+	////////////////////////////////////////////////////////CREATE CONTEXT AND MEMORY OBJECTS //////////////////////////////////////////////////
+	//Create Context
+	cl_int err_ret;
+	cl_context context = clCreateContext(NULL, deviceCount, &devices[0], NULL, NULL, &err_ret);
+
+
+	//Memory object Image-object
+	int divide = 4;
+	size_t image_width = width;
+	size_t image_height = height;
+
+	const cl_image_format image_format = { CL_RGBA, CL_UNSIGNED_INT8 };
+	const cl_image_format image_format_output = { CL_RGBA, CL_UNSIGNED_INT8 };
+
+	cl_int err;
+	cl_mem img1 = clCreateImage2D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, &image_format, image_width, image_height, 0, image, &err);
+	if (err != CL_SUCCESS) { printf("ERROR Image1 %d \n", err); }
+	cl_mem img1_output = clCreateImage2D(context, CL_MEM_WRITE_ONLY, &image_format_output, width, height, 0, NULL, &err);
+	cl_mem img1_output2 = clCreateImage2D(context, CL_MEM_WRITE_ONLY, &image_format_output, width, height, 0, NULL, &err);
+
+	//cl_mem img2 = clCreateImage2D(context, CL_MEM_READ_ONLY, &image_format, image_width, image_height, 0, image1, &err);
+	//cl_mem img2_output = clCreateImage2D(context, CL_MEM_WRITE_ONLY, &image_format, image_width, image_height, 0, NULL, &err);
+	if (err != CL_SUCCESS) { printf("ERROR Image2 %d \n", err); }
+
+	//////////////////////////////////////////////////COMMAND QUEUE//////////////////////////////////////////////////////////////////////
+	//Create command queue
+	cl_command_queue commands = clCreateCommandQueue(context, devices[0], 0, &err);
+	
+
+	/////////////////////////////////////////////////////////////////////LOAD KERNEL///////////////////////////////////////////////////////////////
+
+	//Load the kernels 
+	FILE *fp;
+	char *resize_str;
+	size_t resize_size;
+
+	fp = fopen("resize.cl", "r");
+	if (!fp) {
+		fprintf(stderr, "Failed to load kernel.\n");
+		exit(1);
+	}
+	resize_str = (char*)malloc(DATA_SIZE);
+	resize_size = fread(resize_str, 1, DATA_SIZE, fp);
+	fclose(fp);
+
+	FILE *fp2;
+	char *imgtogrey_str;
+	size_t imgtogrey_size;
+
+	fp2 = fopen("imgtogrey.cl", "r");
+	if (!fp2) {
+		fprintf(stderr, "Failed to load kernel.\n");
+		exit(1);
+	}
+	imgtogrey_str = (char*)malloc(DATA_SIZE);
+	imgtogrey_size = fread(imgtogrey_str, 1, DATA_SIZE, fp2);
+	fclose(fp2);
+
+
+	/////////////////////////////////////////////////CREATE AND BUILD KERNEL/////////////////////////////////////////////////////////////////////////////////////////
+	//create and build the program resize
+	//const char** list_kernel = (const char**)malloc(2 * DATA_SIZE);
+	//int * list_size = (int*)malloc(imgtogrey_size + resize_size*sizeof(size_t));
+	//list_kernel[0] = resize_str; 
+	//list_kernel[1] = imgtogrey_str; 
+	//list_size[0] = resize_size; 
+	//list_size[1] = imgtogrey_size;
+
+	cl_program program = clCreateProgramWithSource(context, 1, (const char **)&resize_str, (const size_t *)&resize_size, &err);
+	//cl_program program = clCreateProgramWithSource(context, 1, list_kernel, (const size_t *)list_size, &err);
+	if (err != CL_SUCCESS) { printf("create program error %d", err); }
+	err = clBuildProgram(program, 1, &devices[0], NULL, NULL, NULL);
+	if (err!=CL_SUCCESS) { 
+		printf("Program resize ERROR %d \n",err);
+		size_t log_size;
+		clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
+		char *log = (char *)malloc(log_size);
+		clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, log_size, log, NULL);
+		printf("%s\n", log);
+	}
+	cl_kernel resize_kernel = clCreateKernel(program, "change_size", &err);
+	
+
+	
+	//grey 
+	//cl_program grey = clCreateProgramWithSource(context, 1, (const char **)&imgtogrey_str, (const size_t *)&imgtogrey_size, &err);
+	//err = clBuildProgram(program, 1, &devices[0], NULL, NULL, NULL);
+	//if (err != CL_SUCCESS) {
+	//	printf("Program Grey ERROR %d \n", err);
+	//	size_t log_size;
+	//	clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
+	//	char *log = (char *)malloc(log_size);
+	//	clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, log_size, log, NULL);
+		
+	//	printf("%s\n", log);
+	//}
+	
+	//cl_kernel grey_kernel = clCreateKernel(program, "to_grey", &err);
+	//if (err != CL_SUCCESS) { printf("Kernel ERROR %d \n", err); }
+	///////////////////////////////////////////////////////////////////////SET ARGUMENT ON KERNEL///////////////////////////////////////////////////////////////////
+	//resize set argument 
+	err = clSetKernelArg(resize_kernel, 0, sizeof(cl_mem), &img1);
+	err |= clSetKernelArg(resize_kernel, 1, sizeof(cl_mem), &img1_output);
+	if (err) { printf("Argument ERROR %d \n", err); }
+	
+	//Grey set argument 
+	//err = clSetKernelArg(grey_kernel, 0, sizeof(cl_mem), &img1);
+	//err |= clSetKernelArg(grey_kernel, 1, sizeof(cl_mem), &img1_output);
+	//if (err) { printf("Argument ERROR grey %d \n", err); }
+
+
+	/////////////////////////////////////////////////////////////////////EXECUTION////////////////////////////////////////////////////////////////////////////////////
+	//execute kernel 
+	size_t global_work_size[2] = { width,height}; 
+	size_t local_work_size[2] = { 1,1 };
+	
+	err = clEnqueueNDRangeKernel(commands, resize_kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL);
+	
+	if (err) { printf("kernel execution ERROR %d \n",err); }
+	//err = clEnqueueNDRangeKernel(commands, grey_kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL);
+
+	////////////////////////////////////////////////////////////////////GET OUTPUT////////////////////////////////////////////////////////////////////////////////
+	//get data calculated in device memory 
+	size_t origin[3] = { 0, 0, 0 };
+	size_t region[3] = { width/4, height/4, 1 };
+	unsigned char* image_output =(unsigned char*) malloc(sizeof(unsigned char) * width * height*4 );
+	if (image_output == NULL) { printf("ALLOCATION PROBLEM"); }
+	err=clEnqueueReadImage(commands, img1_output, CL_TRUE, origin, region, 0, 0,image_output,0,0,0);
+	if (err) { printf("get data error %d \n", err); }
+	
+	//validation
+	const char* filenameori = "IMG_CL/origine.png";
+
+	const char* filename2 = "IMG_CL/test.png";
+	LodePNGColorType colortype = LCT_RGBA;
 	unsigned bitdepth = 8;
-	//LodePNGColorType colortype = LCT_RGB;
-
-	unsigned error3 = lodepng_encode_file(filename2, imggrey, width / 4, height / 4, colortype, bitdepth);
-	if (error3) std::cout << "encoder error" << error3 << ":" << lodepng_error_text(error3) << std::endl;
-
-
-
-	//Encode the disparity image 
-	const char* filename4 = "img/disparity.png";
-	const char* name_disp_right = "img/disparity_right.png";
-	error3 = lodepng_encode_file(filename4, disparity_image, width / 4, height / 4, colortype, bitdepth);
-	if (error3) std::cout << "encoder error" << error3 << ":" << lodepng_error_text(error3) << std::endl;
-	error3 = lodepng_encode_file(name_disp_right, disparity_image_right, width / 4, height / 4, colortype, bitdepth);
-	if (error3) std::cout << "encoder error" << error3 << ":" << lodepng_error_text(error3) << std::endl;
-	//Encode Cross_checking
-	const char* cross_file = "img/cross.png";
-	error3 = lodepng_encode_file(cross_file, crosscheck, width / 4, height / 4, colortype, bitdepth);
-	if (error3) std::cout << "encoder error" << error3 << ":" << lodepng_error_text(error3) << std::endl;
-	//Encode Occlusion 
-	const char* occlusion_file = "img/occlusionv2.png";
-	error3 = lodepng_encode_file(occlusion_file, occlusion, width / 4, height / 4, colortype, bitdepth);
-	if (error3) std::cout << "encoder error" << error3 << ":" << lodepng_error_text(error3) << std::endl;
-	std::cout << "time" << GetCounter(PCFreq, CounterStart);
-
-	free(imgreduct);
-	free(imgreduct1);
-	free(imggrey);
-	free(imggrey1);
-	free(disparity_image);
+	err=lodepng_encode_file(filename2, image_output, width/4, height/4, colortype, bitdepth);
+	err = lodepng_encode_file(filenameori, image, width, height, colortype, bitdepth);
 
 }
