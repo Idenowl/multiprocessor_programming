@@ -190,8 +190,8 @@ int main() {
 	//	printf("%s\n", log);
 	//}
 	
-	//cl_kernel grey_kernel = clCreateKernel(program, "to_grey", &err);
-	//if (err != CL_SUCCESS) { printf("Kernel ERROR %d \n", err); }
+	cl_kernel grey_kernel = clCreateKernel(program, "to_grey", &err);
+	if (err != CL_SUCCESS) { printf("Kernel ERROR %d \n", err); }
 	///////////////////////////////////////////////////////////////////////SET ARGUMENT ON KERNEL///////////////////////////////////////////////////////////////////
 	//resize set argument 
 	err = clSetKernelArg(resize_kernel, 0, sizeof(cl_mem), &img1);
@@ -199,9 +199,9 @@ int main() {
 	if (err) { printf("Argument ERROR %d \n", err); }
 	
 	//Grey set argument 
-	//err = clSetKernelArg(grey_kernel, 0, sizeof(cl_mem), &img1);
-	//err |= clSetKernelArg(grey_kernel, 1, sizeof(cl_mem), &img1_output);
-	//if (err) { printf("Argument ERROR grey %d \n", err); }
+	err = clSetKernelArg(grey_kernel, 0, sizeof(cl_mem), &img1_output);
+	err |= clSetKernelArg(grey_kernel, 1, sizeof(cl_mem), &img1_output2);
+	if (err) { printf("Argument ERROR grey %d \n", err); }
 
 
 	/////////////////////////////////////////////////////////////////////EXECUTION////////////////////////////////////////////////////////////////////////////////////
@@ -212,7 +212,7 @@ int main() {
 	err = clEnqueueNDRangeKernel(commands, resize_kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL);
 	
 	if (err) { printf("kernel execution ERROR %d \n",err); }
-	//err = clEnqueueNDRangeKernel(commands, grey_kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL);
+	err = clEnqueueNDRangeKernel(commands, grey_kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL);
 
 	////////////////////////////////////////////////////////////////////GET OUTPUT////////////////////////////////////////////////////////////////////////////////
 	//get data calculated in device memory 
@@ -220,7 +220,7 @@ int main() {
 	size_t region[3] = { width/4, height/4, 1 };
 	unsigned char* image_output =(unsigned char*) malloc(sizeof(unsigned char) * width * height*4 );
 	if (image_output == NULL) { printf("ALLOCATION PROBLEM"); }
-	err=clEnqueueReadImage(commands, img1_output, CL_TRUE, origin, region, 0, 0,image_output,0,0,0);
+	err=clEnqueueReadImage(commands, img1_output2, CL_TRUE, origin, region, 0, 0,image_output,0,0,0);
 	if (err) { printf("get data error %d \n", err); }
 	
 	//validation
