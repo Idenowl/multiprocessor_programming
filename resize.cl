@@ -20,8 +20,8 @@ __kernel void change_size(read_only image2d_t imagein, write_only image2d_t imgr
 __kernel void to_grey(read_only image2d_t imagein, write_only  image2d_t imggrey) {
 	const sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_NEAREST;
 
-	int h = get_global_id(0);
-	int w = get_global_id(1);
+	int h = get_global_id(1);
+	int w = get_global_id(0);
 	uint r, g, b, a, grey = 0;
 	int2 coord_input = (int2) (w, h);
 
@@ -32,10 +32,11 @@ __kernel void to_grey(read_only image2d_t imagein, write_only  image2d_t imggrey
 
 	uint4 grey_output;
 	grey = 0.2126*r + 0.7152*g + 0.0722*b;
+	
 	grey_output.s0 = grey;
 	grey_output.s1 = grey;
 	grey_output.s2 = grey;
-	grey_output.s3 =255;
+	grey_output.s3 =grey;
 
 	write_imageui(imggrey, coord_input, grey_output);
 }

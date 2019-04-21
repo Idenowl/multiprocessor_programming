@@ -103,15 +103,20 @@ int main() {
 	int divide = 4;
 	size_t image_width = width;
 	size_t image_height = height;
+	size_t image_width_out = width/4;
+	size_t image_height_out = height/4;
 
 	const cl_image_format image_format = { CL_RGBA, CL_UNSIGNED_INT8 };
 	const cl_image_format image_format_output = { CL_RGBA, CL_UNSIGNED_INT8 };
+	const cl_image_format image_format_output2 = { CL_INTENSITY, CL_UNSIGNED_INT8 };
 
 	cl_int err;
 	cl_mem img1 = clCreateImage2D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, &image_format, image_width, image_height, 0, image, &err);
 	if (err != CL_SUCCESS) { printf("ERROR Image1 %d \n", err); }
-	cl_mem img1_output = clCreateImage2D(context, CL_MEM_WRITE_ONLY, &image_format_output, width, height, 0, NULL, &err);
-	cl_mem img1_output2 = clCreateImage2D(context, CL_MEM_WRITE_ONLY, &image_format_output, width, height, 0, NULL, &err);
+	cl_mem img1_output = clCreateImage2D(context, CL_MEM_READ_WRITE, &image_format_output, image_width, image_height, 0, NULL, &err);
+	cl_mem img1_output2 = clCreateImage2D(context, CL_MEM_READ_WRITE, &image_format_output2, image_width, image_height, 0, NULL, &err);
+	cl_mem img1_output3 = clCreateImage2D(context, CL_MEM_READ_WRITE, &image_format_output2, image_width, image_height, 0, NULL, &err);
+	
 
 	//cl_mem img2 = clCreateImage2D(context, CL_MEM_READ_ONLY, &image_format, image_width, image_height, 0, image1, &err);
 	//cl_mem img2_output = clCreateImage2D(context, CL_MEM_WRITE_ONLY, &image_format, image_width, image_height, 0, NULL, &err);
@@ -191,6 +196,7 @@ int main() {
 	//}
 	
 	cl_kernel grey_kernel = clCreateKernel(program, "to_grey", &err);
+	//cl_kernel grey_kernel = clCreateKernel(program, "change_size", &err);
 	if (err != CL_SUCCESS) { printf("Kernel ERROR %d \n", err); }
 	///////////////////////////////////////////////////////////////////////SET ARGUMENT ON KERNEL///////////////////////////////////////////////////////////////////
 	//resize set argument 
@@ -198,38 +204,55 @@ int main() {
 	err |= clSetKernelArg(resize_kernel, 1, sizeof(cl_mem), &img1_output);
 	if (err) { printf("Argument ERROR %d \n", err); }
 	
-	//Grey set argument 
 	err = clSetKernelArg(grey_kernel, 0, sizeof(cl_mem), &img1_output);
 	err |= clSetKernelArg(grey_kernel, 1, sizeof(cl_mem), &img1_output2);
-	if (err) { printf("Argument ERROR grey %d \n", err); }
+	if (err) { printf("Argument ERROR %d \n", err); }
+	//Grey set argument 
+	//err = clSetKernelArg(grey_kernel, 0, sizeof(cl_mem), &img1_output);
+	//err |= clSetKernelArg(grey_kernel, 1, sizeof(cl_mem), &img1_output2);
+	//if (err) { printf("Argument ERROR grey %d \n", err); }
 
 
 	/////////////////////////////////////////////////////////////////////EXECUTION////////////////////////////////////////////////////////////////////////////////////
 	//execute kernel 
 	size_t global_work_size[2] = { width,height}; 
 	size_t local_work_size[2] = { 1,1 };
+	size_t global_work_size2[2] = { width/4,height/4 };
+	cl_event resize_event;
+	cl_event grey_event;
+	cl_event* waitlist = (cl_event*)malloc(2*sizeof(cl_event));
 	
-	err = clEnqueueNDRangeKernel(commands, resize_kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL);
+	err = clEnqueueNDRangeKernel(commands, resize_kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, &resize_event);
 	
 	if (err) { printf("kernel execution ERROR %d \n",err); }
-	err = clEnqueueNDRangeKernel(commands, grey_kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL);
+	waitlist[0] = resize_event;
+	err = clEnqueueNDRangeKernel(commands, grey_kernel, 2, NULL, global_work_size2, local_work_size, 1, waitlist,&grey_event);
 
+	if (err) { printf("kernel grey  execution ERROR %d \n", err); }
+	waitlist[1] = resize_event;
 	////////////////////////////////////////////////////////////////////GET OUTPUT////////////////////////////////////////////////////////////////////////////////
 	//get data calculated in device memory 
 	size_t origin[3] = { 0, 0, 0 };
 	size_t region[3] = { width/4, height/4, 1 };
 	unsigned char* image_output =(unsigned char*) malloc(sizeof(unsigned char) * width * height*4 );
 	if (image_output == NULL) { printf("ALLOCATION PROBLEM"); }
-	err=clEnqueueReadImage(commands, img1_output2, CL_TRUE, origin, region, 0, 0,image_output,0,0,0);
+	err=clEnqueueReadImage(commands, img1_output2, CL_TRUE, origin, region, 0, 0,image_output,2,waitlist,0);
 	if (err) { printf("get data error %d \n", err); }
 	
 	//validation
 	const char* filenameori = "IMG_CL/origine.png";
 
 	const char* filename2 = "IMG_CL/test.png";
+	const char* filename21 = "IMG_CL/test2.png";
+	const char* filename22 = "IMG_CL/test3.png";
+	const char* filename23 = "IMG_CL/test4.png";
 	LodePNGColorType colortype = LCT_RGBA;
+	LodePNGColorType colortype2 = LCT_GREY;
+	LodePNGColorType colortype3 = LCT_RGB;
 	unsigned bitdepth = 8;
 	err=lodepng_encode_file(filename2, image_output, width/4, height/4, colortype, bitdepth);
+	err = lodepng_encode_file(filename21, image_output, width / 4, height / 4, colortype2, bitdepth);
+	err = lodepng_encode_file(filename23, image_output, width / 4, height / 4, colortype3, bitdepth);
 	err = lodepng_encode_file(filenameori, image, width, height, colortype, bitdepth);
 
 }
