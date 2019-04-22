@@ -10,7 +10,7 @@
 #include <windows.h>
 #include <omp.h>
 
-#define DATA_SIZE (2048)
+#define DATA_SIZE (3*2048)
 
 
 int main() {
@@ -115,17 +115,18 @@ int main() {
 	if (err != CL_SUCCESS) { printf("ERROR Image1 %d \n", err); }
 	cl_mem img1_output = clCreateImage2D(context, CL_MEM_READ_WRITE, &image_format_output, image_width, image_height, 0, NULL, &err);
 	cl_mem img1_output2 = clCreateImage2D(context, CL_MEM_READ_WRITE, &image_format_output2, image_width, image_height, 0, NULL, &err);
-	cl_mem img1_output3 = clCreateImage2D(context, CL_MEM_READ_WRITE, &image_format_output2, image_width, image_height, 0, NULL, &err);
-	
+	cl_mem img1_ZNCC = clCreateImage2D(context, CL_MEM_READ_WRITE, &image_format_output2, image_width, image_height, 0, NULL, &err);
+	if (err != CL_SUCCESS) { printf("ERROR Imageimg ZNCC %d \n", err); }
 
-	//cl_mem img2 = clCreateImage2D(context, CL_MEM_READ_ONLY, &image_format, image_width, image_height, 0, image1, &err);
-	//cl_mem img2_output = clCreateImage2D(context, CL_MEM_WRITE_ONLY, &image_format, image_width, image_height, 0, NULL, &err);
+	cl_mem img2 = clCreateImage2D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, &image_format, image_width, image_height, 0, image1, &err);
+	cl_mem img2_output = clCreateImage2D(context, CL_MEM_READ_WRITE, &image_format_output, image_width, image_height, 0, NULL, &err);
+	cl_mem img2_output2 = clCreateImage2D(context, CL_MEM_READ_WRITE, &image_format_output2, image_width, image_height, 0, NULL, &err);
 	if (err != CL_SUCCESS) { printf("ERROR Image2 %d \n", err); }
 
 	//////////////////////////////////////////////////COMMAND QUEUE//////////////////////////////////////////////////////////////////////
 	//Create command queue
 	cl_command_queue commands = clCreateCommandQueue(context, devices[0], 0, &err);
-	
+	cl_command_queue commands2 = clCreateCommandQueue(context, devices[0], 0, &err);
 
 	/////////////////////////////////////////////////////////////////////LOAD KERNEL///////////////////////////////////////////////////////////////
 
@@ -164,7 +165,7 @@ int main() {
 	//list_kernel[0] = resize_str; 
 	//list_kernel[1] = imgtogrey_str; 
 	//list_size[0] = resize_size; 
-	//list_size[1] = imgtogrey_size;
+	//list_size[1] = imgtogrey_size;/
 
 	cl_program program = clCreateProgramWithSource(context, 1, (const char **)&resize_str, (const size_t *)&resize_size, &err);
 	//cl_program program = clCreateProgramWithSource(context, 1, list_kernel, (const size_t *)list_size, &err);
@@ -179,8 +180,9 @@ int main() {
 		printf("%s\n", log);
 	}
 	cl_kernel resize_kernel = clCreateKernel(program, "change_size", &err);
-	
-
+	if (err != CL_SUCCESS) { printf("Kernel resize ERROR %d \n", err); }
+	cl_kernel resize_kernel2 = clCreateKernel(program, "change_size", &err);
+	if (err != CL_SUCCESS) { printf("Kernel resize ERROR %d \n", err); }
 	
 	//grey 
 	//cl_program grey = clCreateProgramWithSource(context, 1, (const char **)&imgtogrey_str, (const size_t *)&imgtogrey_size, &err);
@@ -197,9 +199,18 @@ int main() {
 	
 	cl_kernel grey_kernel = clCreateKernel(program, "to_grey", &err);
 	//cl_kernel grey_kernel = clCreateKernel(program, "change_size", &err);
-	if (err != CL_SUCCESS) { printf("Kernel ERROR %d \n", err); }
+	if (err != CL_SUCCESS) { printf("Kernel grey ERROR %d \n", err); }
+
+	cl_kernel grey_kernel2 = clCreateKernel(program, "to_grey", &err);
+	//cl_kernel grey_kernel = clCreateKernel(program, "change_size", &err);
+	if (err != CL_SUCCESS) { printf("Kernel grey ERROR %d \n", err); }
+
+	cl_kernel ZNCC0 = clCreateKernel(program, "ZNCC_image0", &err); 
+	if (err != CL_SUCCESS) { printf("Kernel ZNCC ERROR %d \n", err); }
 	///////////////////////////////////////////////////////////////////////SET ARGUMENT ON KERNEL///////////////////////////////////////////////////////////////////
 	//resize set argument 
+
+	//Processing image0
 	err = clSetKernelArg(resize_kernel, 0, sizeof(cl_mem), &img1);
 	err |= clSetKernelArg(resize_kernel, 1, sizeof(cl_mem), &img1_output);
 	if (err) { printf("Argument ERROR %d \n", err); }
@@ -207,10 +218,27 @@ int main() {
 	err = clSetKernelArg(grey_kernel, 0, sizeof(cl_mem), &img1_output);
 	err |= clSetKernelArg(grey_kernel, 1, sizeof(cl_mem), &img1_output2);
 	if (err) { printf("Argument ERROR %d \n", err); }
-	//Grey set argument 
-	//err = clSetKernelArg(grey_kernel, 0, sizeof(cl_mem), &img1_output);
-	//err |= clSetKernelArg(grey_kernel, 1, sizeof(cl_mem), &img1_output2);
-	//if (err) { printf("Argument ERROR grey %d \n", err); }
+	
+	//Processing image1 
+	err = clSetKernelArg(resize_kernel2, 0, sizeof(cl_mem), &img2);
+	err |= clSetKernelArg(resize_kernel2, 1, sizeof(cl_mem), &img2_output);
+	if (err) { printf("Argument ERROR %d \n", err); }
+
+	err = clSetKernelArg(grey_kernel2, 0, sizeof(cl_mem), &img2_output);
+	err |= clSetKernelArg(grey_kernel2, 1, sizeof(cl_mem), &img2_output2);
+	if (err) { printf("Argument grey ERROR %d \n", err); }
+
+	//ZNCC
+	int disp_max = 65;
+	int win_size = 9;
+	err= clSetKernelArg(ZNCC0, 0, sizeof(cl_mem), &img1_output2);
+	err |= clSetKernelArg(ZNCC0, 1, sizeof(cl_mem), &img2_output2);
+	err |= clSetKernelArg(ZNCC0, 2, sizeof(int), &disp_max);
+
+	err |= clSetKernelArg(ZNCC0, 3, sizeof(int), &win_size);
+	err |= clSetKernelArg(ZNCC0, 4, sizeof(cl_mem), &img1_ZNCC);
+
+	if (err != CL_SUCCESS) { printf("Argument ZNCC ERROR %d \n", err); }
 
 
 	/////////////////////////////////////////////////////////////////////EXECUTION////////////////////////////////////////////////////////////////////////////////////
@@ -218,26 +246,52 @@ int main() {
 	size_t global_work_size[2] = { width,height}; 
 	size_t local_work_size[2] = { 1,1 };
 	size_t global_work_size2[2] = { width/4,height/4 };
-	cl_event resize_event;
-	cl_event grey_event;
-	cl_event* waitlist = (cl_event*)malloc(2*sizeof(cl_event));
+	int win_half_value = 0.5 * (win_size - 1);
+	size_t global_offset[2] = { win_half_value+65, win_half_value };
+	size_t global_work_size_zncc[2] = { (width / 4)-2*win_half_value-65,(height / 4)- 2*win_half_value };
+	cl_event resize_event, resize_event2, ZNCC0_event;
+	cl_event grey_event, grey_event2;
+	//cl_event* waitlist_im1= (cl_event*)malloc(sizeof(cl_event));
+	cl_event* waitlist = (cl_event*)malloc(5*sizeof(cl_event));
 	
 	err = clEnqueueNDRangeKernel(commands, resize_kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, &resize_event);
-	
-	if (err) { printf("kernel execution ERROR %d \n",err); }
-	waitlist[0] = resize_event;
-	err = clEnqueueNDRangeKernel(commands, grey_kernel, 2, NULL, global_work_size2, local_work_size, 1, waitlist,&grey_event);
+	err |= clEnqueueNDRangeKernel(commands, resize_kernel2, 2, NULL, global_work_size, local_work_size, 0, NULL, &resize_event2);
 
-	if (err) { printf("kernel grey  execution ERROR %d \n", err); }
+	
+	if (err != CL_SUCCESS) { printf("kernel execution ERROR %d \n",err); }
+	waitlist[0] = resize_event;
 	waitlist[1] = resize_event;
+	//waitlist_im1[0] = resize_event2;
+	err = clEnqueueNDRangeKernel(commands, grey_kernel, 2, NULL, global_work_size2, local_work_size, 2, waitlist,&grey_event);
+	err |= clEnqueueNDRangeKernel(commands, grey_kernel2, 2, NULL, global_work_size2, local_work_size, 2, waitlist, &grey_event2);
+
+	clReleaseMemObject(img1);
+	clReleaseMemObject(img1_output);
+	clReleaseMemObject(img2);
+	clReleaseMemObject(img2_output);
+
+	if (err != CL_SUCCESS) { printf("kernel grey  execution ERROR %d \n", err); }
+	waitlist[2] = grey_event;
+	waitlist[3] = grey_event2;
+	
+	err = clEnqueueNDRangeKernel(commands, ZNCC0, 2, global_offset, global_work_size_zncc, local_work_size, 4, waitlist, &ZNCC0_event);
+	if (err != CL_SUCCESS) { printf("kernel ZNCC0 execution ERROR %d \n", err); }
+	
+	waitlist[4] = ZNCC0_event;
+
+
+	clReleaseMemObject(img1_output2);
+	clReleaseMemObject(img2_output2);
 	////////////////////////////////////////////////////////////////////GET OUTPUT////////////////////////////////////////////////////////////////////////////////
 	//get data calculated in device memory 
 	size_t origin[3] = { 0, 0, 0 };
 	size_t region[3] = { width/4, height/4, 1 };
+	size_t region2[3] = { width, height, 1 };
 	unsigned char* image_output =(unsigned char*) malloc(sizeof(unsigned char) * width * height*4 );
 	if (image_output == NULL) { printf("ALLOCATION PROBLEM"); }
-	err=clEnqueueReadImage(commands, img1_output2, CL_TRUE, origin, region, 0, 0,image_output,2,waitlist,0);
-	if (err) { printf("get data error %d \n", err); }
+	//err=clEnqueueReadImage(commands, img2_output2, CL_TRUE, origin, region, 0, 0,image_output, 5, waitlist,0);
+	err=clEnqueueReadImage(commands, img1_ZNCC, CL_TRUE, origin, region, 0, 0,image_output,5,waitlist,0);
+	if (err != CL_SUCCESS) { printf("get data error %d \n", err); }
 	
 	//validation
 	const char* filenameori = "IMG_CL/origine.png";
